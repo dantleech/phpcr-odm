@@ -495,9 +495,8 @@ class DocumentManager implements ObjectManager
     /**
      * Create lower level PHPCR query builder.
      *
-     * NOTE: The ODM QueryBuilder (@link createQueryBuilder) in preference to
-     *       the PHPCR QueryBuilder at this level. This method comes with a 
-     *       deprecation risk.
+     * NOTE: The ODM QueryBuilder (@link createQueryBuilder) is prefered over
+     *       the PHPCR QueryBuilder when working with the ODM.
      *
      * @return PHPCR\Util\QOM\QueryBuilder
      */
