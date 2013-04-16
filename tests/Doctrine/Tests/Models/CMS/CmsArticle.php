@@ -5,7 +5,7 @@ namespace Doctrine\Tests\Models\CMS;
 use Doctrine\ODM\PHPCR\Mapping\Annotations as PHPCRODM;
 
 /**
- * @PHPCRODM\Document
+ * @PHPCRODM\Document(referenceable=true)
  */
 class CmsArticle
 {
@@ -17,7 +17,11 @@ class CmsArticle
     public $text;
     /** @PHPCRODM\ReferenceOne(targetDocument="CmsUser") */
     public $user;
+
     public $comments;
+
+    /** @PHPCRODM\Date */
+    public $date;
 
     /** @PHPCRODM\Binary */
     public $attachments;
