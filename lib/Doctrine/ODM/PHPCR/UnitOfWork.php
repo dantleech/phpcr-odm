@@ -573,6 +573,9 @@ class UnitOfWork
      */
     public function scheduleInsert($document)
     {
+        if (get_class($document) == 'Doctrine\Tests\Models\CMS\CmsTag') {
+            echo "Scheduling insert : ".$document->name."\n";
+        }
         $visited = array();
         $this->doScheduleInsert($document, $visited);
     }
@@ -987,6 +990,10 @@ class UnitOfWork
      */
     public function computeChangeSet(ClassMetadata $class, $document)
     {
+        if ($class->name == 'Doctrine\Tests\Models\CMS\CmsTag') {
+            echo "Nb. refs : ".(count($document->references))."\n";
+        }
+
         if ($document instanceof Proxy && !$document->__isInitialized()) {
             return;
         }
@@ -1207,6 +1214,7 @@ class UnitOfWork
                 $this->scheduledUpdates[$oid] = $document;
             }
         }
+
     }
 
     /**

@@ -40,7 +40,7 @@ class EventIssueXTest extends PHPCRFunctionalTestCase
         $article2->date = new \DateTime('2013-04-16');
 
         return array(
-            array(array($article1)),
+            //array(array($article1)),
             array(array($article1, $article2)),
         );
     }
