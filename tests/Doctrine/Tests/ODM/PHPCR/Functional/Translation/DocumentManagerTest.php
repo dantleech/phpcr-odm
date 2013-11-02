@@ -659,11 +659,47 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
      * bindTranslation with a document inheriting from a translatable document
      * should not fail
      */
-    public function testBindTranslationInherited() {
+    public function testBindTranslationInherited() 
+    {
         $this->doc = new DerivedArticle();
         $this->doc->id = '/functional/' . $this->testNodeName;
         $this->dm->persist($this->doc);
         $this->dm->bindTranslation($this->doc, 'en');
         $this->assertEquals('en', $this->doc->locale);
+    }
+
+    public function testFindTranslationNonPersisted() 
+    {
+        $a = new Article();
+        $a->id = '/functional/' . $this->testNodeName;
+        $this->dm->persist($a);
+
+        $translations = array(
+            'en' => 'Welcome',
+            'fr' => 'Bienvenue',
+            'es' => 'Bienvenidos',
+            'de' => 'Wilkommen',
+        );
+
+        foreach ($translations as $locale => $topic) {
+            $a->topic = $topic;
+            $this->dm->bindTranslation($a, $locale);
+        }
+
+        foreach ($translations as $locale => $topic) {
+            $trans = $this->dm->findTranslation(
+                'Doctrine\Tests\Models\Translation\Article',
+                '/functional/' . $this->testNodeName,
+                $locale
+            );
+
+            $this->assertNotNull($trans);
+            $this->assertInstanceOf('Doctrine\Tests\Models\Translation\Article', $trans);
+            $this->assertEquals($topic, $trans->topic);
+            $this->assertEquals($locale, $trans->locale);
+        }
+
+        $locales = $this->dm->getLocalesFor($a);
+        $this->assertEquals(array('en', 'fr', 'es', 'de'), $locales);
     }
 }

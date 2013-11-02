@@ -2803,8 +2803,21 @@ class UnitOfWork
 
         $oid = spl_object_hash($document);
         if ($this->contains($oid)) {
-            $node = $this->session->getNode($this->getDocumentId($document));
-            $locales = $this->dm->getTranslationStrategy($metadata->translator)->getLocalesFor($document, $node, $metadata);
+            try {
+                $node = $this->session->getNode($this->getDocumentId($document));
+                $locales = $this->dm->getTranslationStrategy($metadata->translator)->getLocalesFor($document, $node, $metadata);
+            } catch (PathNotFoundException $e) {
+                $locales = array();
+            }
+
+            if (isset($this->documentTranslations[$oid])) {
+                $pendingLocales = array_keys($this->documentTranslations[$oid]);
+                foreach ($pendingLocales as $pendingLocale) {
+                    if (!in_array($pendingLocale, $locales)) {
+                        $locales[] = $pendingLocale;
+                    }
+                }
+            }
         } else {
             $locales = array();
         }
@@ -2859,32 +2872,55 @@ class UnitOfWork
     }
 
     /**
-     * Load the translatable fields of the document.
+     * Try and load the translated fields from as-yet not flushed translations.
      *
-     * If locale is not set then it is guessed using the
-     * LanguageChooserStrategy class.
+     * @see doLoadTranslation
      *
-     * If the document is not translatable, this method returns immediately.
-     *
-     * @param object        $document
-     * @param ClassMetadata $metadata
-     * @param string        $locale   The locale to use or null if the default locale should be used
-     * @param boolean       $fallback Whether to do try other languages
+     * @return string - locale that was used or NULL.
      */
-    public function doLoadTranslation($document, ClassMetadata $metadata, $locale = null, $fallback = false)
+    protected function doLoadPendingTranslation($document, ClassMetadata $metadata, $locale = null, $fallback = false)
     {
-        if (!$this->isDocumentTranslatable($metadata)) {
-            return;
+        $oid = spl_object_hash($document);
+
+        if (isset($this->documentTranslations[$oid])) {
+
+            // if wanted locale isn't pending, check fallback
+            if (!isset($this->documentTranslations[$oid][$locale])) {
+                if (!isset($this->documentTranslations[$oid][$fallback])) {
+                    return;
+                }
+
+                // if we are here then we have found the fallback
+                $locale = $fallback;
+            }
+        } else {
+            return null;
         }
 
-        $currentLocale = $this->getCurrentLocale($document, $metadata);
+        $translations = $this->documentTranslations[$oid][$locale];
 
+        foreach ($metadata->translatableFields as $field) {
+            $value = $translations[$field];
+            $metadata->reflFields[$field]->setValue($document, $value);
+        }
+
+        return $locale;
+    }
+
+    /**
+     * Try and load the translated fields using the translation strategies.
+     *
+     * @see doLoadTranslation
+     *
+     * @return string - locale that was used.
+     */
+    protected function doLoadFlushedTranslation($document, ClassMetadata $metadata, $locale = null, $fallback = false)
+    {
         // Load translated fields for current locale
         $oid = spl_object_hash($document);
         $node = $this->session->getNode($this->getDocumentId($oid));
         $strategy = $this->dm->getTranslationStrategy($metadata->translator);
 
-        $locale = $locale ?: $currentLocale;
         if ($strategy->loadTranslation($document, $node, $metadata, $locale)) {
             $localeUsed = $locale;
         } elseif (!$fallback) {
@@ -2909,6 +2945,38 @@ class UnitOfWork
                     $metadata->reflFields[$fieldName]->setValue($document, $value);
                 }
             }
+        }
+
+        return $localeUsed;
+    }
+
+    /**
+     * Load the translatable fields of the document.
+     *
+     * If locale is not set then it is guessed using the
+     * LanguageChooserStrategy class.
+     *
+     * If the document is not translatable, this method returns immediately.
+     *
+     * @param object        $document
+     * @param ClassMetadata $metadata
+     * @param string        $locale   The locale to use or null if the default locale should be used
+     * @param boolean       $fallback Whether to do try other languages
+     */
+    public function doLoadTranslation($document, ClassMetadata $metadata, $locale = null, $fallback = false)
+    {
+        if (!$this->isDocumentTranslatable($metadata)) {
+            return;
+        }
+
+        $currentLocale = $this->getCurrentLocale($document, $metadata);
+
+        $locale = $locale ?: $currentLocale;
+
+        if ($this->doLoadPendingTranslation($document, $metadata, $locale, $fallback)) {
+            $localeUsed = $locale;
+        } else {
+            $localeUsed = $this->doLoadFlushedTranslation($document, $metadata, $locale, $fallback);
         }
 
         $this->setLocale($document, $metadata, $localeUsed);
