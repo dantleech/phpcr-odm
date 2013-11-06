@@ -2882,18 +2882,11 @@ class UnitOfWork
     {
         $oid = spl_object_hash($document);
 
-        if (isset($this->documentTranslations[$oid])) {
+        if (!isset($this->documentTranslations[$oid])) {
+            return null;
+        }
 
-            // if wanted locale isn't pending, check fallback
-            if (!isset($this->documentTranslations[$oid][$locale])) {
-                if (!isset($this->documentTranslations[$oid][$fallback])) {
-                    return;
-                }
-
-                // if we are here then we have found the fallback
-                $locale = $fallback;
-            }
-        } else {
+        if (!isset($this->documentTranslations[$oid][$locale])) {
             return null;
         }
 
@@ -2904,7 +2897,7 @@ class UnitOfWork
             $metadata->reflFields[$field]->setValue($document, $value);
         }
 
-        return $locale;
+        return true;
     }
 
     /**
@@ -2914,40 +2907,15 @@ class UnitOfWork
      *
      * @return string - locale that was used.
      */
-    protected function doLoadFlushedTranslation($document, ClassMetadata $metadata, $locale = null, $fallback = false)
+    protected function doLoadFlushedTranslation($document, ClassMetadata $metadata, $locale)
     {
         // Load translated fields for current locale
         $oid = spl_object_hash($document);
         $node = $this->session->getNode($this->getDocumentId($oid));
         $strategy = $this->dm->getTranslationStrategy($metadata->translator);
+        $res = $strategy->loadTranslation($document, $node, $metadata, $locale);
 
-        if ($strategy->loadTranslation($document, $node, $metadata, $locale)) {
-            $localeUsed = $locale;
-        } elseif (!$fallback) {
-            $msg = "No translation at '{$node->getPath()}' found with strategy '{$metadata->translator} using the default locale '$locale'.";
-            throw new MissingTranslationException($msg);
-        } else {
-            $localesToTry = $this->dm->getLocaleChooserStrategy()->getFallbackLocales($document, $metadata, $locale);
-
-            foreach ($localesToTry as $desiredLocale) {
-                if ($strategy->loadTranslation($document, $node, $metadata, $desiredLocale)) {
-                    $localeUsed = $desiredLocale;
-                    break;
-                }
-            }
-
-            if (empty($localeUsed)) {
-                // we found no locale. so all translated fields are null and we
-                // consider the locale to be the requested one
-                $localeUsed = $locale;
-                foreach ($metadata->translatableFields as $fieldName) {
-                    $value = ($metadata->mappings[$fieldName]['multivalue']) ? array() : null;
-                    $metadata->reflFields[$fieldName]->setValue($document, $value);
-                }
-            }
-        }
-
-        return $localeUsed;
+        return $res;
     }
 
     /**
@@ -2970,13 +2938,41 @@ class UnitOfWork
         }
 
         $currentLocale = $this->getCurrentLocale($document, $metadata);
+        $locale = $locale ? : $currentLocale;
 
-        $locale = $locale ?: $currentLocale;
+        $locales = array();
 
-        if ($this->doLoadPendingTranslation($document, $metadata, $locale, $fallback)) {
+        if ($fallback) {
+            try {
+                $locales = $this->dm->getLocaleChooserStrategy()->getFallbackLocales($document, $metadata, $locale);
+            } catch (MissingTranslationException $e) {
+                $locales = array();
+            }
+        }
+
+        $localeUsed = null;
+        array_unshift($locales, $locale);
+
+        foreach ($locales as $locale) {
+            if ($this->doLoadPendingTranslation($document, $metadata, $locale)) {
+                $localeUsed = $locale;
+                break;
+            }
+
+            if ($this->doLoadFlushedTranslation($document, $metadata, $locale)) {
+                $localeUsed = $locale;
+                break;
+            }
+        }
+
+        if (null === $localeUsed) {
+            // we found no locale. so all translated fields are null and we
+            // consider the locale to be the requested one
             $localeUsed = $locale;
-        } else {
-            $localeUsed = $this->doLoadFlushedTranslation($document, $metadata, $locale, $fallback);
+            foreach ($metadata->translatableFields as $fieldName) {
+                $value = ($metadata->mappings[$fieldName]['multivalue']) ? array() : null;
+                $metadata->reflFields[$fieldName]->setValue($document, $value);
+            }
         }
 
         $this->setLocale($document, $metadata, $localeUsed);
