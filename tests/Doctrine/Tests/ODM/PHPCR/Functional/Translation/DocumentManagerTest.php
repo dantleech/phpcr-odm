@@ -282,6 +282,7 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
         $this->doc = $this->dm->findTranslation($this->class, '/functional/' . $this->testNodeName, 'fr');
         $this->assertEquals('en', $this->doc->locale);
         $children = $this->doc->getChildren();
+
         foreach ($children as $comment) {
             $this->assertEquals('fr', $comment->locale);
             $this->assertEquals('Très bon article', $comment->getText());
@@ -677,7 +678,6 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
         $translations = array(
             'en' => 'Welcome',
             'fr' => 'Bienvenue',
-            'es' => 'Bienvenidos',
             'de' => 'Wilkommen',
         );
 
@@ -700,6 +700,6 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
         }
 
         $locales = $this->dm->getLocalesFor($a);
-        $this->assertEquals(array('en', 'fr', 'es', 'de'), $locales);
+        $this->assertEquals(array('en', 'fr', 'de'), $locales);
     }
 }

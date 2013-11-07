@@ -2910,12 +2910,6 @@ class UnitOfWork
     protected function doLoadFlushedTranslation($document, ClassMetadata $metadata, $locale)
     {
         // Load translated fields for current locale
-        $oid = spl_object_hash($document);
-        $node = $this->session->getNode($this->getDocumentId($oid));
-        $strategy = $this->dm->getTranslationStrategy($metadata->translator);
-        $res = $strategy->loadTranslation($document, $node, $metadata, $locale);
-
-        return $res;
     }
 
     /**
@@ -2940,28 +2934,44 @@ class UnitOfWork
         $currentLocale = $this->getCurrentLocale($document, $metadata);
         $locale = $locale ? : $currentLocale;
 
-        $locales = array();
-
+        // sort out candidate locales
+        $candidateLocales = array();
         if ($fallback) {
             try {
-                $locales = $this->dm->getLocaleChooserStrategy()->getFallbackLocales($document, $metadata, $locale);
+                $candidateLocales = $this->dm->getLocaleChooserStrategy()->getFallbackLocales($document, $metadata, $locale);
             } catch (MissingTranslationException $e) {
-                $locales = array();
+                $candidateLocales = array();
             }
         }
+        array_unshift($candidateLocales, $locale);
+
+        // get everything we need for locale strategy
+        $oid = spl_object_hash($document);
+        $node = $this->session->getNode($this->getDocumentId($oid));
+        $strategy = $this->dm->getTranslationStrategy($metadata->translator);
 
         $localeUsed = null;
-        array_unshift($locales, $locale);
-
-        foreach ($locales as $locale) {
-            if ($this->doLoadPendingTranslation($document, $metadata, $locale)) {
-                $localeUsed = $locale;
+        foreach ($candidateLocales as $candidateLocale) {
+            // see if we can locad an unflushed tranlation
+            if ($this->doLoadPendingTranslation($document, $metadata, $candidateLocale)) {
+                $localeUsed = $candidateLocale;
                 break;
             }
 
-            if ($this->doLoadFlushedTranslation($document, $metadata, $locale)) {
-                $localeUsed = $locale;
+            // try loading the translation from the strategy
+            if ($strategy->loadTranslation($document, $node, $metadata, $candidateLocale)) {
+                $localeUsed = $candidateLocale;
                 break;
+            }
+
+            // if not fallback, then we have failed by this point
+            if (!$fallback) {
+                $msg = sprintf('No translation at "%s" found with strategy "%s"',
+                    $node->getPath(),
+                    $metadata->translator,
+                    $candidateLocale
+                );
+                throw new MissingTranslationException($msg);
             }
         }
 
