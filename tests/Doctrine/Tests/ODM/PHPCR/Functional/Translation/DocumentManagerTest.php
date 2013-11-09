@@ -673,6 +673,7 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
     {
         $a = new Article();
         $a->id = '/functional/' . $this->testNodeName;
+        $a->title = 'Hello';
         $this->dm->persist($a);
 
         $translations = array(
@@ -693,7 +694,7 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
                 $locale
             );
 
-            $this->assertNotNull($trans);
+            $this->assertNotNull($trans, 'Finding translation with locale "'.$locale.'"');
             $this->assertInstanceOf('Doctrine\Tests\Models\Translation\Article', $trans);
             $this->assertEquals($topic, $trans->topic);
             $this->assertEquals($locale, $trans->locale);
@@ -701,5 +702,31 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
 
         $locales = $this->dm->getLocalesFor($a);
         $this->assertEquals(array('en', 'fr', 'de'), $locales);
+    }
+
+    public function testFindTranslationNonPersistedFallback() 
+    {
+        $a = new Article();
+        $a->id = '/functional/' . $this->testNodeName;
+        $a->topic = 'Hello';
+        $a->text = 'Some text';
+        $this->dm->persist($a);
+        $this->dm->flush();
+
+        $a->topic = 'Guten tag';
+        $this->dm->bindTranslation($a, 'de');
+
+        // find the italian translation
+        $trans = $this->dm->findTranslation(
+            'Doctrine\Tests\Models\Translation\Article',
+            '/functional/' . $this->testNodeName,
+            'it'
+        );
+
+        // should fail on it, and try fr before finding de -- where de is not yet flushed
+        $this->assertNotNull($trans, 'Finding translation with locale "it"');
+        $this->assertInstanceOf('Doctrine\Tests\Models\Translation\Article', $trans);
+        $this->assertEquals('Guten tag', $trans->topic);
+        $this->assertEquals('de', $trans->locale);
     }
 }

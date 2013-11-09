@@ -2901,18 +2901,6 @@ class UnitOfWork
     }
 
     /**
-     * Try and load the translated fields using the translation strategies.
-     *
-     * @see doLoadTranslation
-     *
-     * @return string - locale that was used.
-     */
-    protected function doLoadFlushedTranslation($document, ClassMetadata $metadata, $locale)
-    {
-        // Load translated fields for current locale
-    }
-
-    /**
      * Load the translatable fields of the document.
      *
      * If locale is not set then it is guessed using the
@@ -2938,28 +2926,35 @@ class UnitOfWork
         $candidateLocales = array();
         if ($fallback) {
             try {
-                $candidateLocales = $this->dm->getLocaleChooserStrategy()->getFallbackLocales($document, $metadata, $locale);
+                $candidateLocales = $this->dm->getLocaleChooserStrategy()
+                    ->getFallbackLocales($document, $metadata, $locale)
+                ;
             } catch (MissingTranslationException $e) {
-                $candidateLocales = array();
+                throw $e;
             }
         }
         array_unshift($candidateLocales, $locale);
 
         // get everything we need for locale strategy
-        $oid = spl_object_hash($document);
-        $node = $this->session->getNode($this->getDocumentId($oid));
-        $strategy = $this->dm->getTranslationStrategy($metadata->translator);
+        try {
+            $oid = spl_object_hash($document);
+            $node = $this->session->getNode($this->getDocumentId($oid));
+            $strategy = $this->dm->getTranslationStrategy($metadata->translator);
+        } catch (PathNotFoundException $e) {
+            // Node is not persisted
+            $node = null;
+        }
 
         $localeUsed = null;
         foreach ($candidateLocales as $candidateLocale) {
-            // see if we can locad an unflushed tranlation
+            // see if we can load an unflushed translation
             if ($this->doLoadPendingTranslation($document, $metadata, $candidateLocale)) {
                 $localeUsed = $candidateLocale;
                 break;
             }
 
             // try loading the translation from the strategy
-            if ($strategy->loadTranslation($document, $node, $metadata, $candidateLocale)) {
+            if ($node && $strategy->loadTranslation($document, $node, $metadata, $candidateLocale)) {
                 $localeUsed = $candidateLocale;
                 break;
             }
