@@ -564,12 +564,22 @@ class UnitOfWork
         $this->setLocale($document, $class, $locale);
 
         $oid = spl_object_hash($document);
+
         if (empty($this->documentTranslations[$oid])) {
             $this->documentTranslations[$oid] = array();
         }
 
         foreach ($class->translatableFields as $field) {
-            $this->documentTranslations[$oid][$locale][$field] = $class->reflFields[$field]->getValue($document);
+            $originalValue = null;
+
+            if (isset($this->originalData[$oid])) {
+                $originalValue = $this->originalData[$oid][$field];
+            }
+            $newValue = $class->reflFields[$field]->getValue($document);
+
+            if ($originalValue !== $newValue) {
+                $this->documentTranslations[$oid][$locale][$field] = $newValue;
+            }
         }
     }
 
@@ -2893,8 +2903,10 @@ class UnitOfWork
         $translations = $this->documentTranslations[$oid][$locale];
 
         foreach ($metadata->translatableFields as $field) {
-            $value = $translations[$field];
-            $metadata->reflFields[$field]->setValue($document, $value);
+            if (isset($translations[$field])) {
+                $value = $translations[$field];
+                $metadata->reflFields[$field]->setValue($document, $value);
+            }
         }
 
         return true;
@@ -2947,15 +2959,17 @@ class UnitOfWork
 
         $localeUsed = null;
         foreach ($candidateLocales as $candidateLocale) {
-            // see if we can load an unflushed translation
-            if ($this->doLoadPendingTranslation($document, $metadata, $candidateLocale)) {
-                $localeUsed = $candidateLocale;
-                break;
-            }
-
             // try loading the translation from the strategy
             if ($node && $strategy->loadTranslation($document, $node, $metadata, $candidateLocale)) {
                 $localeUsed = $candidateLocale;
+            }
+
+            // see if we can load an unflushed translation
+            if ($this->doLoadPendingTranslation($document, $metadata, $candidateLocale)) {
+                $localeUsed = $candidateLocale;
+            }
+
+            if ($localeUsed) {
                 break;
             }
 

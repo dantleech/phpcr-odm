@@ -729,4 +729,37 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
         $this->assertEquals('Guten tag', $trans->topic);
         $this->assertEquals('de', $trans->locale);
     }
+
+    public function testFindTranslationNonPersistedPartial()
+    {
+        $a = new Article();
+        $a->id = '/functional/' . $this->testNodeName;
+        $a->topic = 'Hello';
+        $a->text = 'This is an article in English';
+        $this->dm->persist($a);
+        $this->dm->flush();
+
+        $a->topic = 'Guten tag';
+        $a->text = 'Dies ist ein Artikel Deutsch';
+        $this->dm->persist($a);
+        $this->dm->bindTranslation($a, 'de');
+        $this->dm->flush();
+        $this->dm->clear();
+
+        $a = $this->dm->find(null, '/functional/' . $this->testNodeName);
+        $a->topic = 'Hallo';
+        $this->dm->bindTranslation($a, 'de');
+
+        // find the italian translation
+        $trans = $this->dm->findTranslation(
+            'Doctrine\Tests\Models\Translation\Article',
+            '/functional/' . $this->testNodeName,
+            'de'
+        );
+
+        $this->assertNotNull($trans, 'Finding translation with locale "de"');
+        $this->assertInstanceOf('Doctrine\Tests\Models\Translation\Article', $trans);
+        $this->assertEquals('Hallo', $trans->topic);
+        $this->assertEquals('Dies ist ein Artikel Deutsch', $trans->text);
+    }
 }
