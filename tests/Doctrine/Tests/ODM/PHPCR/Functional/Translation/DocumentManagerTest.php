@@ -660,7 +660,7 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
      * bindTranslation with a document inheriting from a translatable document
      * should not fail
      */
-    public function testBindTranslationInherited() 
+    public function testBindTranslationInherited()
     {
         $this->doc = new DerivedArticle();
         $this->doc->id = '/functional/' . $this->testNodeName;
@@ -669,7 +669,7 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
         $this->assertEquals('en', $this->doc->locale);
     }
 
-    public function testFindTranslationNonPersisted() 
+    public function testFindTranslationNonPersisted()
     {
         $a = new Article();
         $a->id = '/functional/' . $this->testNodeName;
@@ -704,7 +704,7 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
         $this->assertEquals(array('en', 'fr', 'de'), $locales);
     }
 
-    public function testFindTranslationNonPersistedFallback() 
+    public function testFindTranslationNonPersistedFallback()
     {
         $a = new Article();
         $a->id = '/functional/' . $this->testNodeName;
@@ -730,6 +730,13 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
         $this->assertEquals('de', $trans->locale);
     }
 
+    /**
+     * This covers an edge case: We already have a german translation, but load
+     * the document in english and update one field, then bind that as the
+     * german translation. This will result in overwriting the german fields
+     * that where not touched with the english translation on flush. No merge
+     * is attempted in DocumentManager::bindTranslation().
+     */
     public function testFindTranslationNonPersistedPartial()
     {
         $a = new Article();
@@ -750,7 +757,6 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
         $a->topic = 'Hallo';
         $this->dm->bindTranslation($a, 'de');
 
-        // find the italian translation
         $trans = $this->dm->findTranslation(
             'Doctrine\Tests\Models\Translation\Article',
             '/functional/' . $this->testNodeName,
@@ -760,6 +766,8 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
         $this->assertNotNull($trans, 'Finding translation with locale "de"');
         $this->assertInstanceOf('Doctrine\Tests\Models\Translation\Article', $trans);
         $this->assertEquals('Hallo', $trans->topic);
-        $this->assertEquals('Dies ist ein Artikel Deutsch', $trans->text);
+
+        // this is the maybe surprising result:
+        $this->assertEquals('This is an article in English', $trans->text);
     }
 }
