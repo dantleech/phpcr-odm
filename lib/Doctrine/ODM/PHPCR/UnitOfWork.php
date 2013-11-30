@@ -2884,6 +2884,15 @@ class UnitOfWork
             return false;
         }
 
+        $currentLocale = $this->getCurrentLocale($document, $metadata);
+
+        if ($currentLocale == $locale) {
+            throw new \RuntimeException(sprintf(
+                'Cannot load translations for "%s" because there are already staged changes for this locale.',
+                $currentLocale
+            ));
+        }
+
         $translations = $this->documentTranslations[$oid][$locale];
         foreach ($metadata->translatableFields as $field) {
             $metadata->reflFields[$field]->setValue($document, $translations[$field]);

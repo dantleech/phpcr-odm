@@ -704,38 +704,16 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
         $this->assertEquals(array('en', 'fr', 'de'), $locales);
     }
 
-    public function testFindTranslationNonPersistedFallback()
-    {
-        $a = new Article();
-        $a->id = '/functional/' . $this->testNodeName;
-        $a->topic = 'Hello';
-        $a->text = 'Some text';
-        $this->dm->persist($a);
-        $this->dm->flush();
-
-        $a->topic = 'Guten tag';
-        $this->dm->bindTranslation($a, 'de');
-
-        // find the italian translation
-        $trans = $this->dm->findTranslation(
-            'Doctrine\Tests\Models\Translation\Article',
-            '/functional/' . $this->testNodeName,
-            'it'
-        );
-
-        // should fail on it, and try fr before finding de -- where de is not yet flushed
-        $this->assertNotNull($trans, 'Finding translation with locale "it"');
-        $this->assertInstanceOf('Doctrine\Tests\Models\Translation\Article', $trans);
-        $this->assertEquals('Guten tag', $trans->topic);
-        $this->assertEquals('de', $trans->locale);
-    }
-
     /**
      * This covers an edge case: We already have a german translation, but load
      * the document in english and update one field, then bind that as the
-     * german translation. This will result in overwriting the german fields
-     * that where not touched with the english translation on flush. No merge
-     * is attempted in DocumentManager::bindTranslation().
+     * german translation. This would result in the overwriting the german fields
+     * that where not touched with the english translation on flush.
+     *
+     * Rather than allow this confusing behavior we throw an exception.
+     *
+     * @expectedException RuntimeException
+     * @expectedExceptionMessage there are already staged changes for this locale
      */
     public function testFindTranslationNonPersistedPartial()
     {
@@ -769,5 +747,40 @@ class DocumentManagerTest extends PHPCRFunctionalTestCase
 
         // this is the maybe surprising result:
         $this->assertEquals('This is an article in English', $trans->text);
+    }
+
+    /**
+     * When loading the "it" locale, the fallback is "de" and here we
+     * have a partial translations, and so an exception.
+     *
+     * @see testFindTranslationNonPersistedPartial
+     *
+     * @expectedException RuntimeException
+     * @expectedExceptionMessage there are already staged changes for this locale
+     */
+    public function testFindTranslationNonPersistedFallback()
+    {
+        $a = new Article();
+        $a->id = '/functional/' . $this->testNodeName;
+        $a->topic = 'Hello';
+        $a->text = 'Some text';
+        $this->dm->persist($a);
+        $this->dm->flush();
+
+        $a->topic = 'Guten tag';
+        $this->dm->bindTranslation($a, 'de');
+
+        // find the italian translation
+        $trans = $this->dm->findTranslation(
+            'Doctrine\Tests\Models\Translation\Article',
+            '/functional/' . $this->testNodeName,
+            'it'
+        );
+
+        // should fail on it, and try fr before finding de -- where de is not yet flushed
+        $this->assertNotNull($trans, 'Finding translation with locale "it"');
+        $this->assertInstanceOf('Doctrine\Tests\Models\Translation\Article', $trans);
+        $this->assertEquals('Guten tag', $trans->topic);
+        $this->assertEquals('de', $trans->locale);
     }
 }
