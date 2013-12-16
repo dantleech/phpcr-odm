@@ -24,6 +24,7 @@ use Doctrine\Common\Collections\Collection;
 use Doctrine\Common\Util\ClassUtils;
 
 use Doctrine\ODM\PHPCR\Exception\InvalidArgumentException;
+use Doctrine\ODM\PHPCR\Exception\RuntimeException;
 use Doctrine\ODM\PHPCR\Id\AssignedIdGenerator;
 use Doctrine\ODM\PHPCR\Mapping\ClassMetadata;
 use Doctrine\ODM\PHPCR\Mapping\MappingException;
@@ -559,6 +560,16 @@ class UnitOfWork
         $class = $this->dm->getClassMetadata(get_class($document));
         if (!$this->isDocumentTranslatable($class)) {
             throw new PHPCRException('This document is not translatable, do not use bindTranslation: '.self::objToStr($document, $this->dm));
+        }
+
+        if ($this->getCurrentLocale($document) != $locale
+            && false !== array_search($locale, $this->getLocalesFor($document))
+        ) {
+            throw new RuntimeException(sprintf(
+                'Translation "%s" already exists for "%s". First load this translation if you want to change it, or remove the existing translation.',
+                $locale,
+                self::objToStr($document, $this->dm)
+            ));
         }
 
         $this->setLocale($document, $class, $locale);
@@ -2882,15 +2893,6 @@ class UnitOfWork
 
         if (!isset($this->documentTranslations[$oid][$locale])) {
             return false;
-        }
-
-        $currentLocale = $this->getCurrentLocale($document, $metadata);
-
-        if ($currentLocale == $locale) {
-            throw new \RuntimeException(sprintf(
-                'Cannot load translations for "%s" because there are already staged changes for this locale.',
-                $currentLocale
-            ));
         }
 
         $translations = $this->documentTranslations[$oid][$locale];
